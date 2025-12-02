@@ -43,6 +43,20 @@ def decode_signal(signal):
         byte = bits[i:i+8]
         if len(byte) == 8:
             msg += chr(int(byte,2))
-            
+
     return msg
+
+def decode_file(bits, output_path):
+    byte_array = bytearray()
+
+    #taking 8 bits at a time
+    for i in range(0, len(bits), 8):
+        byte_bits = bits[i:i+8]
+        if len(byte_bits) == 8:
+            value = int(byte_bits, 2)
+            byte_array.append(value)
     
+    f = open(output_path, "wb")
+    f.write(byte_array)
+
+    print("File saved to", output_path)
