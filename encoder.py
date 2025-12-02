@@ -39,3 +39,19 @@ def encode_message(msg):
     signal = np.concatenate(all_tones)
 
     return signal
+
+# FILE ENCODER
+def encode_file(path):
+    f = open(path, "rb")
+    data = f.read()
+
+    #conversion to bitstring
+    bits = ""
+    for byte in data:
+        binary = format(byte, '08b')
+        bits += binary
+
+    print("[INFO] File size (bytes):", len(data))
+    print("[INFO] Total bits:", len(bits))
+    
+    return bits
