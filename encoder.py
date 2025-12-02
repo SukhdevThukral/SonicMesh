@@ -1,7 +1,7 @@
 import numpy as np
 
 SAMPLE_RATE = 44100
-DURATION = 0.08
+DURATION = 0.01
 
 
 #inaudible freqs
