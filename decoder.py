@@ -2,6 +2,9 @@ import numpy as np
 import zlib
 from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, FREQ_TABLE
 
+#important vv
+bits_per_symbol = 5 #32-FSK
+
 def decode_symbol(chunk):
     """
     Decode a single chunk of audio into '0' or '1'
@@ -19,9 +22,9 @@ def decode_symbol(chunk):
     # finding nearest freq_table index
     nearest_idx = np.argmin([abs(peak_freq - f ) for f in FREQ_TABLE])
 
-    #conveting index to 4-bit string
-    bits4 = f"{nearest_idx:04b}"
-    return bits4
+    #conveting index to 5-bit string
+    bits5 = f"{nearest_idx:05b}"
+    return bits5
     
 def decode_signal(signal):
     """
