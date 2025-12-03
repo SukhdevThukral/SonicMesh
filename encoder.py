@@ -1,25 +1,6 @@
 import numpy as np
 import zlib
-
-#======================
-#acoustic parameters
-#======================
-SAMPLE_RATE = 44100
-SYMBOL_DURATION = 0.01 #10ms per symbol (4bits)
-
-
-# implementing 16-FSK frequency table (each represents 4bits = 1 symbol)
-# Range: 17kHz - 20kHz (mostly inaudible)
-
-FREQ_TABLE = [
-    17500, 17800, 18100, 18400,
-    18700, 19000, 19300, 19600, 
-    19900, 20200, 20500, 20800,
-    21100, 21400, 21700, 22000
-]
-
-#packet size (in bytes)
-CHUNK_SIZE = 128
+from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, FREQ_TABLE, CHUNK_SIZE 
 
 # ===========================
 #  encoding a symbol (4bits)
@@ -35,7 +16,7 @@ def encode_symbol(bits4):
 
     t = np.linspace(0, SYMBOL_DURATION, int(SAMPLE_RATE*SYMBOL_DURATION), endpoint=False)
 
-    tone = 0.5*np.sin(2*np.pi*freq*t)
+    tone = AMPLITUDE*np.sin(2*np.pi*freq*t)
     return tone
     
 def encode_bits_16fsk(bitstream):
@@ -49,6 +30,7 @@ def encode_bits_16fsk(bitstream):
 
     signal =  np.concatenate(tones)
     return signal.astype(np.float32)
+
 
 # file + packets
 def packetize_file(path):
