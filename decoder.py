@@ -1,97 +1,125 @@
 import numpy as np
 import zlib
-from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, FREQ_TABLE, SYMBOL_BITS
+from acoustic_config import (
+    SAMPLE_RATE, SYMBOL_DURATION, FREQ_TABLE,
+    SYMBOL_BITS, WINDOW_FUNCTION, SILENCE_BETWEEN_PACKETS)
 
-#important vv
+# 64 FSK
 bits_per_symbol = SYMBOL_BITS #64-FSK
+
+# threshold (tune later)
+SILENCE_THRESHOLD = 0.003
+
+# ==========================
+#  FFT-BASED FSK DECODER
+# ==========================
+
 
 def decode_symbol(chunk):
     """
-    Decode a single chunk of audio into '0' or '1'
-    usign FFT frequency detection
+    Decode a single chunk of audio to 5 bits (0-31 index)
     """
 
-    #computing fft of the chunk
-    fft = np.fft.rfft(chunk* np.hanning(len(chunk)))
-    freqs = np.fft.rfftfreq(len(chunk), 1 / SAMPLE_RATE)
+    # applying window
+    windowed = chunk  * WINDOW_FUNCTION(len(chunk))
 
-    #finding the frequency with maximum magnitude
-    peak_idx = np.argmax(np.abs(fft))
+    fft = np.fft.rfft(windowed)
+    magnitudes = np.abs(fft)
+
+    peak_idx = np.argmax(magnitudes)
+    peak = magnitudes[peak_idx]
+
+    if peak < SILENCE_THRESHOLD:
+        return None
+    
+    freqs = np.fft.rfftfreq(len(chunk), 1 / SAMPLE_RATE)
     peak_freq = freqs[peak_idx]
 
-    # finding nearest freq_table index
-    nearest_idx = np.argmin([abs(peak_freq - f ) for f in FREQ_TABLE])
-
+    # finding closest fsk frqncy indedx
+    idx = int(np.argmin(np.abs(np.array(FREQ_TABLE) - peak_freq)))
+    idx = max(0, min(idx, len(FREQ_TABLE)-1))
+    
     #conveting index to 6-bit string
-    bits = f"{nearest_idx:0{bits_per_symbol}b}"
+    bits = f"{idx:0{bits_per_symbol}b}"
     return bits
     
 def decode_signal(signal):
     """
-    Decode a full audio signal into a big bitstring
+    converting raw audio samples + bitstream of all symbols,
+    accounting for silence between packets
     """
+
     sample_per_symbol = int(SAMPLE_RATE*SYMBOL_DURATION)
-    bits = ""
+
+    bitstream = ""
 
     for i in range(0, len(signal), sample_per_symbol):
         chunk = signal[i:i + sample_per_symbol]
         if len(chunk) < sample_per_symbol:
             break
-        bit = decode_symbol(chunk)
-        bits += bit
+        
+        #normalizing chunk before FFT
+        chunk = chunk / (np.max(np.abs(chunk))+ 1e-9)
+        bits = decode_symbol(chunk)
+        if bits is not None:
+            bitstream+=bits
+    if len(bitstream) % bits_per_symbol != 0:
+        bitstream = bitstream[:-len(bitstream)%bits_per_symbol]
+            
+    return bitstream
 
-    return bits
 
-def decode_file(bits, output_path):
-    """
-    Decode bitstring of PACKETIZED + COMPRESSED file.
-    each packet structure:
-        [LEN (1 byte)][DATA LEN bytes][CRC32 (4 bytes)]
-    """
+# ==============================
+#   BITSTREAM => file rebuild
+# ===============================
 
-    print("[Decoder] Starting file bit parsing....")
+def decode_file(bitstream, output_path):
 
-    raw_bytes = bytearray()
+    print("\n[Decoder] Coverting bits to bytes....")
+    extra_bits = len(bitstream) % 8 
+    if extra_bits != 0:
+        bitstream = bitstream[extra_bits:]
 
-    #taking 8 bits at a time
-    for i in range(0, len(bits), 8):
-        byte_bits = bits[i:i+8]
-        if len(byte_bits) == 8:
-            value = int(byte_bits, 2)
-            raw_bytes.append(value)
+    raw = bytearray()
+    for i in range(0, len(bitstream), 8):
+        byte =bitstream[i:i+8]
+        raw.append(int(byte, 2))
 
-    print("[Decoder] Total received bytes:", len(raw_bytes))
+    print("[Decoder] Total received bytes:", len(raw))
     
     #now parsing packets
     index = 0
     reconstructed = bytearray()
 
-    while index < len(raw_bytes):
+    # PACKET STRCUTURE:
+    # [1 byte length][data][CRC32 4 bytes]
+
+    while index < len(raw):
 
         # read length
-        if index >= len(raw_bytes):
+        if index >= len(raw):
             break
 
-        chunk_len = raw_bytes[index]
+        chunk_len = raw[index]
         index += 1
 
         #read data
         data_end = index + chunk_len
 
-        if data_end > len(raw_bytes):
+        if data_end > len(raw):
             print("[ERROR] Packet truncated! Stopping now.")
             break
         
-        chunk_data = raw_bytes[index:data_end]
+        chunk_data = raw[index:data_end]
         index = data_end
 
 
         #read crc32
-        if index + 4 > len(raw_bytes):
+        if index + 4 > len(raw):
             print("[ERROR] Missing CRC at end. Stopping now.")
             break
             
-        crc_bytes = raw_bytes[index:index+4]
+        crc_bytes = raw[index:index+4]
         index += 4
 
         received_crc = int.from_bytes(crc_bytes, "big")
