@@ -4,13 +4,19 @@
 
 SAMPLE_RATE = 44100
 
-#symbol = 4bits
-SYMBOL_DURATION = 0.005 #10ms per symbol
-AMPLITUDE = 0.5 #AUDIO APMLITUDE
+#symbol = 6bits
 
-#*32-FSK ultrasonic frequencies (mostly inaudible)
+SYMBOL_BITS = 6 
+SYMBOL_DURATION = 0.015 #2ms per symbol
+AMPLITUDE = 0.25 #AUDIO APMLITUDE
+
+#*64-FSK ultrasonic frequencies (mostly inaudible)
+# keeping above ~20kHz to reduce audiblity, upper limit ~22kHz for most speakers
 import numpy as np 
-FREQ_TABLE = np.linspace(17000, 22000, 32,dtype=int).tolist()
+FREQ_TABLE = np.linspace(20050, 22000, 64,dtype=int).tolist()
 
 # packet chunk size
-CHUNK_SIZE = 128
+CHUNK_SIZE = 32
+
+
+# switched to 64-fsk -> 6 bits per symbol
