@@ -1,4 +1,5 @@
 import numpy as np
+import lzma
 import zlib
 from acoustic_config import(
     SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, 
@@ -6,6 +7,7 @@ from acoustic_config import(
     SILENCE_BETWEEN_PACKETS, WINDOW_FUNCTION)
 
 
+sync_bits = "11111000001111100000"
 bits_per_symbol = SYMBOL_BITS
 
 def encode_symbol(bitchunk: str):
@@ -55,7 +57,7 @@ def packetize_file(path):
 
     print("[INFO] Original file size:", len(raw))
 
-    compressed = zlib.compress(raw, 9)
+    compressed = lzma.compress(raw, preset=6)
     print("[INFO] Compressed size:", len(compressed))
 
     packets = []
@@ -80,6 +82,7 @@ def packets_to_bits(packets):
     bitstream = ""
 
     for p in packets:
+        bitstream += sync_bits
         for byte in p:
             bitstream += f"{byte:08b}"
 
