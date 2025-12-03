@@ -1,13 +1,12 @@
 import sounddevice as sd
-from encoder import encode_message, encode_file, encode_bit
+from encoder import encode_message, encode_file
 from scipy.io.wavfile import write
 import numpy as np
-
-SAMPLE_RATE = 44100
+from acoustic_config import SAMPLE_RATE
 
 #transmitting messages
 def transmit(msg, save_file=True):
-    print("[SonicMesh] Preparing to transmit data: ", msg)
+    print(" Transmitting message..")
 
 
     #encoding the msg into ultrasonic tones
@@ -27,18 +26,10 @@ def transmit(msg, save_file=True):
 
 #transmitting ACTUAL FILES
 def transmitf(file_path, save_file=True):
-    print("[SonicMesh] Preparing to transmit files: ", file_path)
+    print("[SonicMesh]  Transmitting file: ", file_path)
 
     #encode file into bitstr
-    bits = encode_file(file_path)
-
-    #converting bits to audio signals
-    all_tones = []
-    for bit in bits:
-        tone = encode_bit(bit)
-        all_tones.append(tone)
-    signal = np.concatenate(all_tones)
-
+    signal = encode_file(file_path)
 
     if save_file:
         scaled = np.int16(signal / np.max(np.abs(signal))*32767)
@@ -49,16 +40,13 @@ def transmitf(file_path, save_file=True):
     sd.wait()
     print("File transmission complete")
 
-
-#usage
 if __name__ == "__main__":
-    choice = input("Sent (T)ext or (F)ile? ").lower()
+    choice = input("Send (T)ext or (F)ile? ").strip().lower()
     if choice == "t":
-        message = input("Enter message to transmit: ")
-        transmit(message, save_file=True)
+        msg = input("Enter message to transmit: ")
+        transmit(msg, save_file=True)
     elif choice == "f":
         file_path = input("Enter file path to transmit: ")
         transmitf(file_path, save_file=True)
     else:
         print("Invalid choice")
-    
