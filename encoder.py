@@ -1,37 +1,52 @@
 import numpy as np
 import zlib
-from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, FREQ_TABLE, CHUNK_SIZE, SYMBOL_BITS
+from acoustic_config import(
+    SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, 
+    FREQ_TABLE, CHUNK_SIZE, SYMBOL_BITS,
+    SILENCE_BETWEEN_PACKETS, WINDOW_FUNCTION)
 
 
 bits_per_symbol = SYMBOL_BITS
 
-def encode_symbol(bits5):
+def encode_symbol(bitchunk: str):
     """
-    encode 5 bits (string) into an ultrasonic tone.
+    encode 6bits (string) into an ultrasonic tone.
     """
 
-    idx = int(bits5, 2)
+    idx = int(bitchunk, 2)
     freq = FREQ_TABLE[idx]
 
-    t = np.linspace(0, SYMBOL_DURATION, int(SAMPLE_RATE*SYMBOL_DURATION), endpoint=False)
+    samples = int(SAMPLE_RATE*SYMBOL_DURATION)
 
-    tone = AMPLITUDE*np.sin(2*np.pi*freq*t) * np.hanning(len(t))
-    return tone
+    t = np.linspace(0, SYMBOL_DURATION, samples, endpoint=False)
+
+    # windowed tone to cleaner FFT peak
+    tone = AMPLITUDE*np.sin(2*np.pi*freq*t)
+    tone *= WINDOW_FUNCTION(len(t))
+
+    return tone.astype(np.float32)
     
-def encode_bits_fsk(bitstream):
+def encode_bits_fsk(bitstream: str):
+    """Stream of bits => concatenatd ultrasonic tones + silence spacings"""
     tones = []
+    
+
     for i in range(0, len(bitstream), bits_per_symbol):
         chunk = bitstream[i:i+bits_per_symbol]
         if len(chunk) < bits_per_symbol:
             chunk = chunk.ljust(bits_per_symbol,'0') #pad
+
         tone = encode_symbol(chunk)
-        tones.append(tone)
+        tones.append(tone) # it would hlep FFT distinguish symbols
 
     signal =  np.concatenate(tones)
     return signal.astype(np.float32)
 
 
-# file + packets
+# ======================================
+# FILE => PACKETS => BITSTREAM => AUDIO
+# ======================================
+
 def packetize_file(path):
     
     with open(path, "rb") as f:
@@ -68,9 +83,10 @@ def packets_to_bits(packets):
         for byte in p:
             bitstream += f"{byte:08b}"
 
-    # pad to multiple of 6(since 32-FSK)
-    if len(bitstream) % bits_per_symbol != 0:
-        pad_len= bits_per_symbol - (len(bitstream)%bits_per_symbol)
+    # pad bitstream to full symbols
+    remainder = len(bitstream) % bits_per_symbol
+    if remainder  != 0:
+        pad_len= bits_per_symbol - remainder
         bitstream+= "0" * pad_len
 
     print("[INFO] Total bits:", len(bitstream))
@@ -81,18 +97,23 @@ def packets_to_bits(packets):
 def encode_file(path):
     packets = packetize_file(path)
     bitstream = packets_to_bits(packets)
-    audio = encode_bits_fsk(bitstream)
-    return audio
 
-# text msg encoder
-def encode_message(msg):
+    return encode_bits_fsk(bitstream)
 
-    bitstream = ''
+# ========================================
+#    TEXT MESSAGE ENCODING (simple mode)
+# ========================================
 
-    for char in msg:
-        bitstream += f"{ord(char):08b}"
+def encode_message(msg: str):
+    data = msg.encode("utf-8")
+    length = len(data)
 
-    # pad for 32-FSK
+    header = length.to_bytes(2,"big")
+
+    payload = header + data
+
+    bitstream = ''.join(f"{byte:08b}" for byte in payload)
+
     if len(bitstream) % bits_per_symbol != 0:
         pad_len = bits_per_symbol - (len(bitstream) % bits_per_symbol)
         bitstream += "0" * pad_len
