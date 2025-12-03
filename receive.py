@@ -2,11 +2,12 @@ import sounddevice as sd
 import numpy as np
 from decoder import decode_signal, decode_file
 import soundfile as sf
+from acoustic_config import SAMPLE_RATE
 
 SAMPLE_RATE = 44100
 
 def receive(duration=3):
-    print("[SonicMesh] Listening for message...")
+    print("[SonicMesh] Listening...")
     
     #record audio from the microphone
 
@@ -17,10 +18,10 @@ def receive(duration=3):
     signal = recording.flatten()
 
     #decoding the ultrasonic signal back into text
-    msg = decode_signal(signal)
+    bits = decode_signal(signal)
 
-    print("Received message:", msg)
-    return msg
+    print("Received bitstream:", bits)
+    return bits
 
 def receive_file(wav_path, output_file):
     print("[SonicMesh] Reading WAV file:", wav_path)
@@ -29,17 +30,3 @@ def receive_file(wav_path, output_file):
 
     bits = decode_signal(signal)
     decode_file(bits, output_file)
-
-
-#usage
-
-if __name__ == "__main__":
-    choice = input("Receive (T)ext from mic or (F)ile from WAV? ").lower()
-    if choice == "t":
-        receive(duration=5)
-    elif choice == "f":
-        wav_path = input("Enter WAV file path: ")
-        output_file = input("Save output as: ")
-        receive_file(wav_path, output_file)
-    else:
-        print("Invalid choice")
