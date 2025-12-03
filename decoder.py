@@ -1,9 +1,9 @@
 import numpy as np
 import zlib
-from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, FREQ_TABLE
+from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, FREQ_TABLE, SYMBOL_BITS
 
 #important vv
-bits_per_symbol = 5 #32-FSK
+bits_per_symbol = SYMBOL_BITS #64-FSK
 
 def decode_symbol(chunk):
     """
@@ -12,7 +12,7 @@ def decode_symbol(chunk):
     """
 
     #computing fft of the chunk
-    fft = np.fft.rfft(chunk)
+    fft = np.fft.rfft(chunk* np.hanning(len(chunk)))
     freqs = np.fft.rfftfreq(len(chunk), 1 / SAMPLE_RATE)
 
     #finding the frequency with maximum magnitude
@@ -22,9 +22,9 @@ def decode_symbol(chunk):
     # finding nearest freq_table index
     nearest_idx = np.argmin([abs(peak_freq - f ) for f in FREQ_TABLE])
 
-    #conveting index to 5-bit string
-    bits5 = f"{nearest_idx:05b}"
-    return bits5
+    #conveting index to 6-bit string
+    bits = f"{nearest_idx:0{bits_per_symbol}b}"
+    return bits
     
 def decode_signal(signal):
     """
