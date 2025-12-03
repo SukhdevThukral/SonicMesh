@@ -1,9 +1,9 @@
 import numpy as np
 import zlib
-from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, FREQ_TABLE, CHUNK_SIZE 
+from acoustic_config import SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, FREQ_TABLE, CHUNK_SIZE, SYMBOL_BITS
 
 
-bits_per_symbol = 5
+bits_per_symbol = SYMBOL_BITS
 
 def encode_symbol(bits5):
     """
@@ -15,7 +15,7 @@ def encode_symbol(bits5):
 
     t = np.linspace(0, SYMBOL_DURATION, int(SAMPLE_RATE*SYMBOL_DURATION), endpoint=False)
 
-    tone = AMPLITUDE*np.sin(2*np.pi*freq*t)
+    tone = AMPLITUDE*np.sin(2*np.pi*freq*t) * np.hanning(len(t))
     return tone
     
 def encode_bits_fsk(bitstream):
@@ -34,9 +34,9 @@ def encode_bits_fsk(bitstream):
 # file + packets
 def packetize_file(path):
     
-    f = open(path, "rb")
-    raw = f.read()
-    f.close()
+    with open(path, "rb") as f:
+        raw = f.read()
+
 
     print("[INFO] Original file size:", len(raw))
 
@@ -68,9 +68,9 @@ def packets_to_bits(packets):
         for byte in p:
             bitstream += f"{byte:08b}"
 
-    # pad to multiple of 4(since 16-FSK)
-    if len(bitstream) %4 != 0:
-        pad_len= 4 - (len(bitstream)%4)
+    # pad to multiple of 6(since 32-FSK)
+    if len(bitstream) % bits_per_symbol != 0:
+        pad_len= bits_per_symbol - (len(bitstream)%bits_per_symbol)
         bitstream+= "0" * pad_len
 
     print("[INFO] Total bits:", len(bitstream))
@@ -92,7 +92,7 @@ def encode_message(msg):
     for char in msg:
         bitstream += f"{ord(char):08b}"
 
-    # pad for 16-FSK
+    # pad for 32-FSK
     if len(bitstream) % bits_per_symbol != 0:
         pad_len = bits_per_symbol - (len(bitstream) % bits_per_symbol)
         bitstream += "0" * pad_len
