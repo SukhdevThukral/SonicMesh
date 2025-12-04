@@ -6,9 +6,10 @@ from acoustic_config import (
     SYMBOL_BITS, WINDOW_FUNCTION, SILENCE_BETWEEN_PACKETS)
 
 # 64 FSK
+
+bits_per_symbol = SYMBOL_BITS 
 sync_indices = [63,0,63,0]
-SYNC_BITS = ''.join(f"{i:06b}" for i in sync_indices)
-bits_per_symbol = SYMBOL_BITS #64-FSK
+SYNC_BITS = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
 
 # threshold (tune later)
 SILENCE_THRESHOLD = 1e-6
@@ -41,6 +42,10 @@ def decode_symbol(chunk):
     peak = magnitudes[peak_idx]
 
     if peak < SILENCE_THRESHOLD:
+        return None
+    
+    mean_mag = np.mean(magnitudes)
+    if peak < mean_mag*4:
         return None
     
     freqs = np.fft.rfftfreq(len(chunk), 1 / SAMPLE_RATE)
@@ -107,6 +112,33 @@ def decode_signal(signal):
 #   BITSTREAM => file rebuild
 # ===============================
 
+def find_sync(bitstream, sync_indices, bits_per_symbol):
+    sync_len = len(sync_indices)
+    target_sync = sync_indices
+
+    for offset in range(bits_per_symbol):
+        symbols = []
+        for i in range(offset, len(bitstream) - bits_per_symbol + 1, bits_per_symbol):
+            sym = int(bitstream[i:i+bits_per_symbol],2)
+            symbols.append(sym)
+        
+        repeats_needed = 2
+        total_needed = sync_len * repeats_needed
+        if len(symbols) < total_needed:
+            continue
+
+        for s_idx in range(len(symbols) - total_needed+1):
+            match = True
+            for r in range(repeats_needed):
+                start = s_idx + r*sync_len
+                if symbols[start:start+sync_len] != target_sync:
+                    match=False
+                    break
+            if match:
+                return offset + (s_idx + repeats_needed*sync_len)*bits_per_symbol
+            
+    return -1
+
 def decode_file(bitstream, output_path):
     """
     convert a coninuous bitstream into a reconstructed file
@@ -126,23 +158,57 @@ def decode_file(bitstream, output_path):
     # bitstream = bitstream[start + len(SYNC_BITS):]
     # packets_bits = bitstream.split(SYNC_BITS)
 
-    # --------- DEBUG: inspecting bitstream and locating sync postiions ----
+    # --------- symbool aligned sync search ----
     print("\n [DEBUG] bitstream length:", len(bitstream))
     print("[DEBUG] bitstream head(200):", bitstream[:200])
 
-    first = bitstream.find(SYNC_BITS)
-    print("[DEBUG] first SYNC index", first)
-    if first == -1:
-        print("[DEBUG] No SYNC pattern found in bitstream")
-    else:
-        pos = first
-        cnt = 0
-        while pos != -1 and cnt < 0:
-            print(f"[DEBUG] SYNC found at {pos}")
-            pos = bitstream.find(SYNC_BITS, pos + 1)
-            cnt += 1
+    sync_bits_full = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
+    sync_len_symbols = len(sync_indices)
+    target_sync = [int(sync_bits_full[k:k+bits_per_symbol], 2) for k in range(0, len(sync_bits_full), bits_per_symbol)]
 
-    # === DEBUG: end ========================================================
+    found = False
+    best = None 
+
+    for offset in range(bits_per_symbol):
+        symbols = []
+        for i in range(offset, len(bitstream) - bits_per_symbol + 1, bits_per_symbol):
+            sym = int(bitstream[i:i+bits_per_symbol],2)
+            symbols.append(sym)
+
+        repeats_needed = 3
+        total_needed = sync_len_symbols * repeats_needed
+        if len(symbols) < total_needed:
+            continue
+
+        for s_idx in range(0, len(symbols) - total_needed + 1):
+            match = True
+            for r in range(repeats_needed):
+                start = s_idx + r* sync_len_symbols
+                if symbols[start:start + sync_len_symbols] != target_sync:
+                    match =  False
+                    break
+            if match:
+                    bit_pos = offset + (s_idx + repeats_needed * sync_len_symbols) * bits_per_symbol
+                    best = (offset, bit_pos)
+                    found = True
+                    break
+        if found:
+            break
+    if not found:
+        print("[DEBUG] No symbol-aligned SYNC found (tried offsets). failing back to naive search.") 
+        naive = bitstream.find(SYNC_BITS)
+        print("[DEBUG] naive string search index:", naive)
+        if naive == -1:
+            print("[ERROR] No SYNC. Returning.")
+            return
+        else:
+            bitstream = bitstream[naive+ len(SYNC_BITS):]
+    else:
+        offset, bit_start = best
+        print(f"[DEBUG] sync found: offset = {offset}, payload_bit_start={bit_start}")
+        bitstream = bitstream[bit_start:]
+
+    # === symbol-aligned finder: end  ========================================================
     print("\n[Decoder] Coverting bits to bytes....")
 
     raw = bytearray()
