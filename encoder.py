@@ -7,7 +7,8 @@ from acoustic_config import(
     SILENCE_BETWEEN_PACKETS, WINDOW_FUNCTION)
 
 
-sync_bits = "11111000001111100000"
+sync_indices = [63,0,63,0]
+sync_bits = ''.join(f"{i:06b}" for i in sync_indices)
 bits_per_symbol = SYMBOL_BITS
 
 def encode_symbol(bitchunk: str):
@@ -66,11 +67,9 @@ def packetize_file(path):
         chunk = compressed[i:i + CHUNK_SIZE]
 
         packet = bytearray()
-        packet.append(len(chunk))
-        packet.extend(chunk)
-
-        crc = zlib.crc32(chunk)
-        packet.extend(crc.to_bytes(4, "big"))
+        packet += len(chunk).to_bytes(2, "big")
+        packet += chunk
+        packet += zlib.crc32(chunk).to_bytes(4, "big")
 
         packets.append(packet)
 
@@ -100,6 +99,16 @@ def packets_to_bits(packets):
 def encode_file(path):
     packets = packetize_file(path)
     bitstream = packets_to_bits(packets)
+    print("[DEBUG] encoder bitstream len:", len(bitstream))
+    print("[DEBUG] first 200 bits (encoder):", bitstream[:200])
+
+    #quick synth of first symbol and printing its peak freq(sanity)
+
+    if len(bitstream) >= bits_per_symbol:
+        first_symbol = bitstream[:bits_per_symbol]
+        idx = int(first_symbol,2)
+        freq = FREQ_TABLE[idx]
+        print(f"[DEBUG] first symbol index ={idx}, freq={freq} Hz")
 
     return encode_bits_fsk(bitstream)
 
