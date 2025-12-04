@@ -8,7 +8,7 @@ from acoustic_config import(
 
 
 sync_indices = [63,0,63,0]
-sync_bits = ''.join(f"{i:06b}" for i in sync_indices)
+sync_bits = ''.join(f"{i:0{SYMBOL_BITS}b}" for i in sync_indices)
 bits_per_symbol = SYMBOL_BITS
 
 def encode_symbol(bitchunk: str):
@@ -25,13 +25,15 @@ def encode_symbol(bitchunk: str):
 
     # windowed tone to cleaner FFT peak
     tone = AMPLITUDE*np.sin(2*np.pi*freq*t)
-    tone *= WINDOW_FUNCTION(len(t))
+    if WINDOW_FUNCTION is not None:
+        tone *= WINDOW_FUNCTION(len(t))
 
     return tone.astype(np.float32)
     
 def encode_bits_fsk(bitstream: str):
     """Stream of bits => concatenatd ultrasonic tones + silence spacings"""
     tones = []
+    silence = np.zeros(int(SAMPLE_RATE*SILENCE_BETWEEN_PACKETS), dtype=np.float32)
     
 
     for i in range(0, len(bitstream), bits_per_symbol):
@@ -41,6 +43,8 @@ def encode_bits_fsk(bitstream: str):
 
         tone = encode_symbol(chunk)
         tones.append(tone) # it would hlep FFT distinguish symbols
+        if SILENCE_BETWEEN_PACKETS > 0:
+            tones.append(silence)
 
     signal =  np.concatenate(tones)
     return signal.astype(np.float32)
@@ -80,8 +84,10 @@ def packetize_file(path):
 def packets_to_bits(packets):
     bitstream = ""
 
+    preamble_repeats = 8
+    sync_bits = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
     for p in packets:
-        bitstream += sync_bits
+        bitstream += sync_bits * preamble_repeats
         for byte in p:
             bitstream += f"{byte:08b}"
 
