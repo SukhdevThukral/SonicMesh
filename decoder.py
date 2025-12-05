@@ -12,7 +12,14 @@ sync_indices = [63,0,63,0]
 SYNC_BITS = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
 
 # threshold (tune later)
-SILENCE_THRESHOLD = 1e-6
+SILENCE_THRESHOLD = 0.05
+_debug_symbol_count = 0
+
+
+print(f"[DEBUG] expected sync pattern: {SYNC_BITS}")
+print(f"[DEBUG] SYNC indices: {sync_indices}")
+print(f"[DEBUG] freq range: {FREQ_TABLE[0]} Hz to {FREQ_TABLE[-1]} Hz")
+print(f"[DEBUG] freq spacing: {(FREQ_TABLE[-1] - FREQ_TABLE[0]) / (len(FREQ_TABLE)-1):.1f} Hz")
 
 # ==========================
 #  FFT-BASED FSK DECODER
@@ -31,50 +38,67 @@ def decode_symbol(chunk):
     5. map peak frequency to closest fsk frequency index
     6. convert index to a bits strin of length "bits+per_symbol"
     """
+    global _debug_symbol_count
+
+    n_fft = len(chunk) * 4
 
     # applying window
     windowed = chunk  * WINDOW_FUNCTION(len(chunk))
 
-    fft = np.fft.rfft(windowed)
+    fft = np.fft.rfft(windowed, n=n_fft)
     magnitudes = np.abs(fft)
 
-    peak_idx = np.argmax(magnitudes)
-    peak = magnitudes[peak_idx]
+    freqs = np.fft.rfftfreq(n_fft, 1 / SAMPLE_RATE)
 
-    if peak < SILENCE_THRESHOLD:
+    freq_min = FREQ_TABLE[0] -500
+    freq_max = FREQ_TABLE[-1] + 500
+    freq_mask = (freqs >= freq_min) & (freqs <= freq_max)
+
+    valid_mags = magnitudes[freq_mask]
+    valid_freqs = freqs[freq_mask]
+
+    if len(valid_mags) == 0:
+        return None
+
+    peak_idx = np.argmax(valid_mags)
+    peak_mag = valid_mags[peak_idx]
+    peak_freq = valid_freqs[peak_idx]
+
+    mean_mag = np.mean(valid_mags)
+    if peak_mag < SILENCE_THRESHOLD or peak_mag < mean_mag*2.5:
         return None
     
-    mean_mag = np.mean(magnitudes)
-    if peak < mean_mag*4:
-        return None
-    
-    freqs = np.fft.rfftfreq(len(chunk), 1 / SAMPLE_RATE)
-    peak_freq = freqs[peak_idx]
+    # mapping to closest fsk frqncy indedx
 
-    # finding closest fsk frqncy indedx
-    idx = int(np.argmin(np.abs(np.array(FREQ_TABLE) - peak_freq)))
-    idx = max(0, min(idx, len(FREQ_TABLE)-1))
+    freq_diffs = np.abs(np.array(FREQ_TABLE)- peak_freq)
+
+    idx = int(np.argmin(freq_diffs))
+    closest_freq = FREQ_TABLE[idx]
+
+    if not hasattr(decode_symbol, 'count'):
+        decode_symbol.count = 0
+    decode_symbol += 1
+    if decode_symbol.count <= 10:
+        print(f"[DEBUG] symbol {decode_symbol.count}:"
+              f"peak = {peak_freq:.0f}Hz => idx {idx}"
+              f"(target ={closest_freq}Hz, diff={abs(peak_freq-closest_freq):.0f}Hz)")
     
-    #conveting index to 6-bit string
     bits = f"{idx:0{bits_per_symbol}b}"
     return bits
     
 def decode_signal(signal):
     """
     Convert the full audio signal into a continous bitstream.
-
-    Steps:
-    1. split the audio into chunks, each representing one symbol
-    2. normalise each chunk for fft
-    3. decode each symbol to bits
-    4. remove extra bits tht dont form a full symbol at the end
     """
 
     sample_per_symbol = int(SAMPLE_RATE*SYMBOL_DURATION)
     print(f"[DEBUG] signal len =  {len(signal)} samples, sample_per_symbol = {sample_per_symbol}")
+    print(f"[DEBUG] SYMBOL DURATION: {SYMBOL_DURATION}s")
+    print(f"[DEBUG] native fft res:  {SAMPLE_RATE/sample_per_symbol:.1f} Hz")
+    print(f"[DEBUG] with 4x padding: {SAMPLE_RATE/(sample_per_symbol*4):.1f}Hz")
 
     if len(signal) <sample_per_symbol:
-        print("[DEBUG] signal shorter than one symbol -< no symbols decoded")
+        print("[error] signal shorter than one symbol -< no symbols decoded")
         return ""
     
     #quick energy check
@@ -85,7 +109,11 @@ def decode_signal(signal):
     #previewing first 50 samples for sanity (pritns truncated)
     print("[DEBUG] first sampels: ", np.array2string(signal[:50], precision=3, separator=", "))
     
+    decode_symbol.count = 0
+
     bitstream = ""
+    symbols_decoded = 0
+    symbols_skipped = 0
 
     for i in range(0, len(signal), sample_per_symbol):
         chunk = signal[i:i + sample_per_symbol]
@@ -93,14 +121,21 @@ def decode_signal(signal):
             break
         
         #normalizing chunk before FFT
-        chunk = chunk / (np.max(np.abs(chunk))+ 1e-9)
         bits = decode_symbol(chunk)
         if bits is not None:
             bitstream+=bits
+            symbols_decoded+=1
+        else:
+            symbols_skipped+=1
+
+    total_chunks = symbols_decoded + symbols_skipped
+    print(f"\n[DEBUG] Decoded {symbols_decoded}/{total_chunks} symbols"
+          f"({symbols_skipped}silent/weak)")
 
     # trimming extra bits to form full symbols        
     if len(bitstream) % bits_per_symbol != 0:
         bitstream = bitstream[:-len(bitstream)%bits_per_symbol]
+
     print(f"[DEBUG] final bitstream length = {len(bitstream)} bits")
     if len(bitstream) > 0:
         print("[DEBUG] bitstream sample:", bitstream[:200])
@@ -112,33 +147,50 @@ def decode_signal(signal):
 #   BITSTREAM => file rebuild
 # ===============================
 
-def find_sync(bitstream, sync_indices, bits_per_symbol):
-    sync_len = len(sync_indices)
-    target_sync = sync_indices
+
+def find_sync_robust(bitstream, sync_indices, bits_per_symbol):
+    sync_pattern = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
+    sync_len = len(sync_pattern)
+
+
+    print(f"[DEBUG] Searching for SYNC: {sync_pattern}")
+    print(f"[DEBUG] Bitstream length: {len(bitstream)}")
+
+    # first try: exact string match(fastest)
+    pos = bitstream.find(sync_pattern)
+    if pos != -1:
+        check_pos = pos
+        sync_count = 0
+        while check_pos + sync_len <= len(bitstream):
+            if bitstream[check_pos:check_pos+sync_len] == sync_pattern:
+                sync_count += 1
+                check_pos += sync_len
+            else:
+                break
+        print(f"[DEBUG] found {sync_count} consecutive sync patterns at postion {pos}")
+        return check_pos
+    
+    print(f"[DEBUG] exact match failed. trying symbol-aligned search...")
 
     for offset in range(bits_per_symbol):
         symbols = []
         for i in range(offset, len(bitstream) - bits_per_symbol + 1, bits_per_symbol):
-            sym = int(bitstream[i:i+bits_per_symbol],2)
-            symbols.append(sym)
-        
-        repeats_needed = 2
-        total_needed = sync_len * repeats_needed
-        if len(symbols) < total_needed:
-            continue
+            sym_bits = bitstream[i:i + bits_per_symbol]
+            if len(sym_bits) == bits_per_symbol:
+                symbols.append(int(sym_bits,2))
 
-        for s_idx in range(len(symbols) - total_needed+1):
-            match = True
-            for r in range(repeats_needed):
-                start = s_idx + r*sync_len
-                if symbols[start:start+sync_len] != target_sync:
-                    match=False
-                    break
-            if match:
-                return offset + (s_idx + repeats_needed*sync_len)*bits_per_symbol
-            
+        for s_idx in range(len(symbols)- len(sync_indices)+1):
+            matches = 0
+            for j, expected in enumerate(sync_indices):
+                if symbols[s_idx +  j] == expected:
+                    matches += 1
+
+            if matches >= len(sync_indices) - 1:
+                bit_pos = offset + (s_idx + len(sync_indices)) * bits_per_symbol
+                print(f"[DEBUG] fuzzy sync at offset {offset}, bit  {bit_pos} ({matches}/{len(sync_indices)} match)")
+                return bit_pos
     return -1
-
+    
 def decode_file(bitstream, output_path):
     """
     convert a coninuous bitstream into a reconstructed file
@@ -151,81 +203,43 @@ def decode_file(bitstream, output_path):
     5. decompressing using LZMA and write to disk
     """
     
-    # start = bitstream.find(SYNC_BITS)
-    # if start == -1:
-    #     print("[ERROR] No sync found in bitstream")
-    #     return
-    # bitstream = bitstream[start + len(SYNC_BITS):]
-    # packets_bits = bitstream.split(SYNC_BITS)
+    print("\n" + "="*60)
+    print("DECONDING FILE")
+    print("="*60)
 
-    # --------- symbool aligned sync search ----
-    print("\n [DEBUG] bitstream length:", len(bitstream))
-    print("[DEBUG] bitstream head(200):", bitstream[:200])
+    sync_pos = find_sync_robust(bitstream, sync_indices, bits_per_symbol)
+    if sync_pos == -1:
+        print("[ERROR] no sync found in bitstream")
+        print("[DEBUG] bitstream analysis for first 10 symbols:")
+        for i in range(0, min(60, len(bitstream)), bits_per_symbol):
+            sym = bitstream[i:i+bits_per_symbol]
+            if len(sym) == bits_per_symbol:
+                idx = int(sym,2)
+                print(f"Bit {i:4d}: {sym} => index {idx:2d} ({FREQ_TABLE[idx]:5d} Hz)")
+        return
 
-    sync_bits_full = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
-    sync_len_symbols = len(sync_indices)
-    target_sync = [int(sync_bits_full[k:k+bits_per_symbol], 2) for k in range(0, len(sync_bits_full), bits_per_symbol)]
 
-    found = False
-    best = None 
+    bitstream = bitstream[sync_pos:]
+    print(f"[DEBUG] starting payload extraction from bit {sync_pos}")
 
-    for offset in range(bits_per_symbol):
-        symbols = []
-        for i in range(offset, len(bitstream) - bits_per_symbol + 1, bits_per_symbol):
-            sym = int(bitstream[i:i+bits_per_symbol],2)
-            symbols.append(sym)
-
-        repeats_needed = 3
-        total_needed = sync_len_symbols * repeats_needed
-        if len(symbols) < total_needed:
-            continue
-
-        for s_idx in range(0, len(symbols) - total_needed + 1):
-            match = True
-            for r in range(repeats_needed):
-                start = s_idx + r* sync_len_symbols
-                if symbols[start:start + sync_len_symbols] != target_sync:
-                    match =  False
-                    break
-            if match:
-                    bit_pos = offset + (s_idx + repeats_needed * sync_len_symbols) * bits_per_symbol
-                    best = (offset, bit_pos)
-                    found = True
-                    break
-        if found:
-            break
-    if not found:
-        print("[DEBUG] No symbol-aligned SYNC found (tried offsets). failing back to naive search.") 
-        naive = bitstream.find(SYNC_BITS)
-        print("[DEBUG] naive string search index:", naive)
-        if naive == -1:
-            print("[ERROR] No SYNC. Returning.")
-            return
-        else:
-            bitstream = bitstream[naive+ len(SYNC_BITS):]
-    else:
-        offset, bit_start = best
-        print(f"[DEBUG] sync found: offset = {offset}, payload_bit_start={bit_start}")
-        bitstream = bitstream[bit_start:]
-
-    # === symbol-aligned finder: end  ========================================================
     print("\n[Decoder] Coverting bits to bytes....")
 
     raw = bytearray()
     i = 0
+    packet_count = 0
+    
     while True:
-        start = bitstream.find(SYNC_BITS, i)
-        if start == -1:
-            break
-        i = start + len(SYNC_BITS)
-
-        
-        end = bitstream.find(SYNC_BITS, i)
-        
-        if end != -1:
-            packet_bits = bitstream[i:end] 
+        next_sync = bitstream.find(SYNC_BITS, i)
+        if next_sync == -1:
+            packet_bits= bitstream[i:]
         else:
-            packet_bits = bitstream[i:]
+            packet_bits = bitstream[i:next_sync]
+            i = next_sync + len(SYNC_BITS)
+
+        if len(packet_bits) <8:
+            if next_sync == -1:
+                break
+            continue
 
         # trimming bits tht dont form full bytes
         extra = len(packet_bits) % 8
@@ -236,28 +250,23 @@ def decode_file(bitstream, output_path):
         for j in range(0, len(packet_bits), 8):
             byte = packet_bits[j:j+8]
             raw.append(int(byte,2))
+
+        packet_count += 1
         
-        if end == -1:
+        if next_sync == -1:
             break
 
-        i = end
+    print(f"[DECODER] found {packet_count} packets")
 
-    # for packet_bits in packets_bits:
-    #     extra = len(packet_bits) % 8
-    #     if extra != 0:
-    #         packet_bits = packet_bits[:-extra]
-
-    #     for i in range(0, len(packet_bits), 8):
-    #         byte = packet_bits[i:i+8]
-    #         raw.append(int(byte, 2))
-
-    print("[Decoder] Total received bytes:", len(raw))
+    print("[DECODER] Total received bytes:", len(raw))
     
     # ==============================
     # parse packets and verify CRC
     # ==============================
     index = 0
     reconstructed = bytearray()
+    valid_packets = 0
+    crc_errors = 0
 
     # PACKET STRCUTURE:
     # [1 byte length][data][CRC32 4 bytes]
@@ -269,7 +278,7 @@ def decode_file(bitstream, output_path):
         data_end = index + chunk_len
 
         if data_end > len(raw):
-            print("[ERROR] Packet truncated! Stopping now.")
+            print(f"[ERROR] Packet truncated at byte {index}")
             break
         
         chunk = raw[index:data_end]
@@ -278,7 +287,7 @@ def decode_file(bitstream, output_path):
 
         # extract crc32
         if index + 4 > len(raw):
-            print("[ERROR] Missing CRC at end. Stopping now.")
+            print("[ERROR] Missing CRC at end.")
             break
             
         crc_bytes = raw[index:index+4]
@@ -288,26 +297,30 @@ def decode_file(bitstream, output_path):
         computed_crc = zlib.crc32(chunk)
 
         # skipping packet if crc mismatches
-        # if received_crc != computed_crc:
-        #     print("[WARNING] CRC mismatch: Skipping packet.")
-        #     continue
+        if received_crc != computed_crc:
+            print(f"[WARNING] CRC mismatch in packet {valid_packets}")
+            crc_bytes+=1
 
         # append valid packet data
 
         reconstructed.extend(chunk)
+        valid_packets +=1
 
-    print("[Decoder] Total reconstructed bytes before decompress:", len(reconstructed))
-
+    print("[DECODER] valid packets:", valid_packets)
+    print(f"[DECODER] reconstructed bytes: {len(reconstructed)}")
+    print(f"CRC errors: {crc_errors}")
     # ==========================
     # decompress and save file
     # ==========================
     try:
         decompressed = lzma.decompress(reconstructed)
-    except:
-        print("[ERROR] Decompression failed. File corrupted.")
+        print(f"[DECODER] decompressed size: {len(decompressed)}")
+    except Exception as e:
+        print(f"[ERROR] Decompression failed. {e}.")
         return
     
     with open(output_path, "wb") as f:
         f.write(decompressed)
 
     print("File saved to:", output_path)
+    print("="*60)
