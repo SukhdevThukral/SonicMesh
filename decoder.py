@@ -40,7 +40,7 @@ def decode_symbol(chunk):
     """
     global _debug_symbol_count
 
-    n_fft = len(chunk) * 4
+    n_fft = len(chunk) * 8
 
     # applying window
     windowed = chunk  * WINDOW_FUNCTION(len(chunk))
@@ -77,7 +77,7 @@ def decode_symbol(chunk):
 
     if not hasattr(decode_symbol, 'count'):
         decode_symbol.count = 0
-    decode_symbol += 1
+    decode_symbol.count += 1
     if decode_symbol.count <= 10:
         print(f"[DEBUG] symbol {decode_symbol.count}:"
               f"peak = {peak_freq:.0f}Hz => idx {idx}"
@@ -148,48 +148,23 @@ def decode_signal(signal):
 # ===============================
 
 
-def find_sync_robust(bitstream, sync_indices, bits_per_symbol):
-    sync_pattern = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
-    sync_len = len(sync_pattern)
-
-
-    print(f"[DEBUG] Searching for SYNC: {sync_pattern}")
-    print(f"[DEBUG] Bitstream length: {len(bitstream)}")
-
-    # first try: exact string match(fastest)
-    pos = bitstream.find(sync_pattern)
-    if pos != -1:
-        check_pos = pos
-        sync_count = 0
-        while check_pos + sync_len <= len(bitstream):
-            if bitstream[check_pos:check_pos+sync_len] == sync_pattern:
-                sync_count += 1
-                check_pos += sync_len
-            else:
-                break
-        print(f"[DEBUG] found {sync_count} consecutive sync patterns at postion {pos}")
-        return check_pos
+def find_sync(bits, min_match = 0.7, pattern = '111111000000111111000000'):
     
-    print(f"[DEBUG] exact match failed. trying symbol-aligned search...")
+    L = len(pattern)
+    best_pos = -1
+    best_score = 0
 
-    for offset in range(bits_per_symbol):
-        symbols = []
-        for i in range(offset, len(bitstream) - bits_per_symbol + 1, bits_per_symbol):
-            sym_bits = bitstream[i:i + bits_per_symbol]
-            if len(sym_bits) == bits_per_symbol:
-                symbols.append(int(sym_bits,2))
+    for i in range(len(bits)-L):
+        window = bits[i:i+L]
+        score = sum(a==b for a,b in zip(window,pattern))
 
-        for s_idx in range(len(symbols)- len(sync_indices)+1):
-            matches = 0
-            for j, expected in enumerate(sync_indices):
-                if symbols[s_idx +  j] == expected:
-                    matches += 1
+        if score > best_score:
+            best_score = score
+            best_pos = i
 
-            if matches >= len(sync_indices) - 1:
-                bit_pos = offset + (s_idx + len(sync_indices)) * bits_per_symbol
-                print(f"[DEBUG] fuzzy sync at offset {offset}, bit  {bit_pos} ({matches}/{len(sync_indices)} match)")
-                return bit_pos
-    return -1
+    print(f"[SYNC] Best match {best_score}/{L} at {best_pos}")
+
+    return best_pos if best_score >= L*min_match else -1
     
 def decode_file(bitstream, output_path):
     """
@@ -207,22 +182,18 @@ def decode_file(bitstream, output_path):
     print("DECONDING FILE")
     print("="*60)
 
-    sync_pos = find_sync_robust(bitstream, sync_indices, bits_per_symbol)
+    pattern = SYNC_BITS
+    sync_pos = find_sync(bitstream, pattern=pattern)
     if sync_pos == -1:
         print("[ERROR] no sync found in bitstream")
-        print("[DEBUG] bitstream analysis for first 10 symbols:")
-        for i in range(0, min(60, len(bitstream)), bits_per_symbol):
-            sym = bitstream[i:i+bits_per_symbol]
-            if len(sym) == bits_per_symbol:
-                idx = int(sym,2)
-                print(f"Bit {i:4d}: {sym} => index {idx:2d} ({FREQ_TABLE[idx]:5d} Hz)")
         return
 
 
     bitstream = bitstream[sync_pos:]
-    print(f"[DEBUG] starting payload extraction from bit {sync_pos}")
+    while bitstream.startswith(SYNC_BITS):
+        bitstream = bitstream[len(SYNC_BITS):]
 
-    print("\n[Decoder] Coverting bits to bytes....")
+    print(f"[DEBUG] Payload starts with: {bitstream[:64]}")
 
     raw = bytearray()
     i = 0
@@ -299,7 +270,8 @@ def decode_file(bitstream, output_path):
         # skipping packet if crc mismatches
         if received_crc != computed_crc:
             print(f"[WARNING] CRC mismatch in packet {valid_packets}")
-            crc_bytes+=1
+            crc_errors+=1
+            continue
 
         # append valid packet data
 
