@@ -7,6 +7,7 @@ from acoustic_config import SAMPLE_RATE
 SAMPLE_RATE = 44100
 
 def receive(duration=3):
+    raise NotImplementedError("[SonicMesh] recieve() us not implemented in this release.")
     print("[SonicMesh] Listening...")
     
     #record audio from the microphone
@@ -24,6 +25,7 @@ def receive(duration=3):
     return bits
 
 def receive_file(wav_path, output_file):
+    raise NotImplementedError("[SonicMesh] receive_file() is not implemented in this release")
     print("[SonicMesh] Reading WAV file:", wav_path)
     signal, sr = sf.read(wav_path)
     signal = signal.flatten()
