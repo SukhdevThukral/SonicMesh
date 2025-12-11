@@ -1,0 +1,11 @@
+[project]
+name = "sonicmesh"
+version = "0.1.0"
+description = "Acoustic communication library for audio-based data transfer"
+authors = [{name="Sukhdev Thukral"}]
+readme = "README.md"
+license = {file= "LICENSE"}
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/SukhdevThukral/SonicMesh"
