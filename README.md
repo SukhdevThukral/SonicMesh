@@ -47,6 +47,42 @@ SonicMesh is **serious research project** aiming to pushing the limits of acoust
 - Test **basic audio-based file transfer, including images** (altho its still underdeveloped since the FSK decoding is still not optimized).
 - Contribute to development of **high-frequency data transmission techniques**
 
+## Architecture Overview
+SonicMesh internally consists of three major components:
+
+1. Encoder
+- Convert raw bytes/text into symbols
+- Maps each symbol to one of 64 frequencies (64-FSK)
+- Generates the final audio waveform for transmission
+
+2. Decoder
+- Performs FFT based frequency detection
+-  extracts symbol sequences from the spectrogram
+- converts them back into bytes, text, or file data
+
+3. Acoustic Configuration
+Defines:
+- Sample Rate
+- Symbol Duration
+- Frequency Table
+- Bit depth per symbol (64-FSK -> 6 bits/ sybmol)
+
+
+## Roadmap
+Planned areas of development:
+- High speed FSK enhancemeents for faster JPEG (and other file) transmission
+- Better noise robustness using windowing and adaptive thresholding
+- Microphone live decoding (real-time RX path)
+- Spectrogram visualization tools for debugging
+- Higher-order modulation (128-FSK or chirp based systems)
+- Erorr correction codes (Hamming, BCH, or even Reed-Solomon)
+
+## Current Limitations
+To set the correct expectations:
+- File transfer works but is slow at the moment
+- FFT decoding still needs a lot of optimization and noise filtration
+- Microphone live receive is still in experimental / "in-progress" stage.
+
 ## Contributing
 
 Contributions are welcome especially inL
