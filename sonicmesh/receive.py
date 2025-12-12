@@ -1,8 +1,8 @@
 import sounddevice as sd
 import numpy as np
-from decoder import decode_signal, decode_file
+from .decoder import decode_signal, decode_file
 import soundfile as sf
-from acoustic_config import SAMPLE_RATE
+from .acoustic_config import SAMPLE_RATE
 
 SAMPLE_RATE = 44100
 

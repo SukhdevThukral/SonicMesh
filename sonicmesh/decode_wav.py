@@ -1,6 +1,6 @@
 import soundfile as sf
 import numpy as np
-from decoder import decode_signal, decode_file
+from .decoder import decode_signal, decode_file
 
 def bits_to_text(bitstream):
     """"Convert an 8-bit aligned bitstream into a UTF-8 string."""

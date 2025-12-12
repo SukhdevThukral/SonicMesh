@@ -1,9 +1,9 @@
 import sounddevice as sd
-from encoder import encode_message, encode_file
+from .encoder import encode_message, encode_file
 from scipy.io.wavfile import write
 
 import numpy as np
-from acoustic_config import SAMPLE_RATE
+from .acoustic_config import SAMPLE_RATE
 
 def _save_wav(path, signal):
     """Convert float32 => 16 bit PCM & store wav"""

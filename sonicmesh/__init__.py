@@ -11,8 +11,8 @@ This package provides:
 Modules exposed at top-level:
     encode_message, encode_file
     transmit, transmitf
-    decode-wav
-    deocde_signal, decode_file
+    decode_wav
+    decode_signal, decode_file
 """
 
 from .encoder import (

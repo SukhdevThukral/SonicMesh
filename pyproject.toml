@@ -1,6 +1,12 @@
 [project]
 name = "sonicmesh"
-version = "0.1.0"
+version = "0.1.6"
+dependencies = [
+    "numpy>=1.24",
+    "sounddevice>=0.4",
+    "soundfile>=0.12",
+    "scipy>=1.11",
+]
 description = "Acoustic communication library for audio-based data transfer"
 authors = [{name="Sukhdev Thukral"}]
 readme = "README.md"
@@ -9,3 +15,9 @@ requires-python = ">=3.8"
 
 [project.urls]
 Homepage = "https://github.com/SukhdevThukral/SonicMesh"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]

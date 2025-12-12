@@ -1,7 +1,7 @@
 import numpy as np
 import lzma
 import zlib
-from acoustic_config import(
+from .acoustic_config import(
     SAMPLE_RATE, SYMBOL_DURATION, AMPLITUDE, 
     FREQ_TABLE, CHUNK_SIZE, SYMBOL_BITS,
     SILENCE_BETWEEN_PACKETS, WINDOW_FUNCTION)

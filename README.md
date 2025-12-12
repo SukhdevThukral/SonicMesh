@@ -25,17 +25,13 @@ pip install sonicmesh
 
 ## Quick Example
 ```bash
-from sonicmesh import encode_message, transmit, decode_signal
+from sonicmesh import transmit, decode_wav
 
-
-#Encoding a message
-signal = encode_message("Hello World!!")
-
-# Transmit over speaker
-transmit(signal)
+#Encoding a message and transmitting over the speaker
+transmit("Hello World!!")
 
 # Decoding received signal (from WAV file for now - microphones later)
-decoded = decode_signal("received.wav")
+decoded = decode_wav("message.wav")
 print(decoded)
 
 ```
