@@ -8,12 +8,13 @@ from acoustic_config import (
 # 64 FSK
 
 bits_per_symbol = SYMBOL_BITS 
+
+# synchronisation pattern (4 symbols: 63,0,63,0).
+
 sync_indices = [63,0,63,0]
 SYNC_BITS = ''.join(f"{i:0{bits_per_symbol}b}" for i in sync_indices)
 
-# threshold (tune later)
 SILENCE_THRESHOLD = 0.05
-_debug_symbol_count = 0
 
 
 # ==========================
@@ -33,7 +34,6 @@ def decode_symbol(chunk):
     5. map peak frequency to closest fsk frequency index
     6. convert index to a bits strin of length "bits+per_symbol"
     """
-    global _debug_symbol_count
 
     n_fft = len(chunk) * 8
 
@@ -76,12 +76,14 @@ def decode_symbol(chunk):
 def decode_signal(signal):
     """
     Convert the full audio signal into a continous bitstream.
+
+    Splitting the signal into fixed size symbol windows, and decodes each
+    window, concatenates the resulting btstring.
     """
 
     sample_per_symbol = int(SAMPLE_RATE*SYMBOL_DURATION)
 
     if len(signal) <sample_per_symbol:
-        print("[error] signal shorter than one symbol -< no symbols decoded")
         return ""
     
     #quick energy check
@@ -124,6 +126,12 @@ def decode_signal(signal):
 
 
 def find_sync(bits, min_match = 0.7, pattern = '111111000000111111000000'):
+    """
+    Searching for the synchronisation seq in the bitstream.
+    Returning the index of the best match if above the given threshold,
+    otherwise reutnring -1
+    """
+    
     
     L = len(pattern)
     best_pos = -1
@@ -145,21 +153,15 @@ def decode_file(bitstream, output_path):
 
     steps:
     1. split bitstream into packets using SYNC_BITS as seperator
-    2. convert bits to bytes
+    2. convert packet bitstr to bytes
     3. validating packet length and CRC32
     4. Reconstruct originial compressed file
     5. decompressing using LZMA and write to disk
     """
     
-    print("\n" + "="*60)
-    print("DECODING FILE")
-    print("="*60)
 
     pattern = SYNC_BITS
     sync_pos = find_sync(bitstream, pattern=pattern)
-    if sync_pos == -1:
-        print("[ERROR] no sync found in bitstream")
-        return
 
 
     bitstream = bitstream[sync_pos:]
@@ -170,6 +172,7 @@ def decode_file(bitstream, output_path):
     i = 0
     packet_count = 0
     
+    # extracting packets until stream ends
     while True:
         next_sync = bitstream.find(SYNC_BITS, i)
         if next_sync == -1:
@@ -197,10 +200,6 @@ def decode_file(bitstream, output_path):
         
         if next_sync == -1:
             break
-
-    print(f"[DECODER] found {packet_count} packets")
-
-    print("[DECODER] Total received bytes:", len(raw))
     
     # ==============================
     # parse packets and verify CRC
@@ -220,7 +219,6 @@ def decode_file(bitstream, output_path):
         data_end = index + chunk_len
 
         if data_end > len(raw):
-            print(f"[ERROR] Packet truncated at byte {index}")
             break
         
         chunk = raw[index:data_end]
@@ -229,7 +227,6 @@ def decode_file(bitstream, output_path):
 
         # extract crc32
         if index + 4 > len(raw):
-            print("[ERROR] Missing CRC at end.")
             break
             
         crc_bytes = raw[index:index+4]
@@ -240,7 +237,6 @@ def decode_file(bitstream, output_path):
 
         # skipping packet if crc mismatches
         if received_crc != computed_crc:
-            print(f"[WARNING] CRC mismatch in packet {valid_packets}")
             crc_errors+=1
             continue
 
@@ -248,22 +244,14 @@ def decode_file(bitstream, output_path):
 
         reconstructed.extend(chunk)
         valid_packets +=1
-
-    print("[DECODER] valid packets:", valid_packets)
-    print(f"[DECODER] reconstructed bytes: {len(reconstructed)}")
-    print(f"CRC errors: {crc_errors}")
     # ==========================
     # decompress and save file
     # ==========================
     try:
         decompressed = lzma.decompress(reconstructed)
-        print(f"[DECODER] decompressed size: {len(decompressed)}")
     except Exception as e:
         print(f"[ERROR] Decompression failed. {e}.")
         return
     
     with open(output_path, "wb") as f:
         f.write(decompressed)
-
-    print("File saved to:", output_path)
-    print("="*60)
