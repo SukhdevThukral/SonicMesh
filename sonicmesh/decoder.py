@@ -16,11 +16,6 @@ SILENCE_THRESHOLD = 0.05
 _debug_symbol_count = 0
 
 
-print(f"[DEBUG] expected sync pattern: {SYNC_BITS}")
-print(f"[DEBUG] SYNC indices: {sync_indices}")
-print(f"[DEBUG] freq range: {FREQ_TABLE[0]} Hz to {FREQ_TABLE[-1]} Hz")
-print(f"[DEBUG] freq spacing: {(FREQ_TABLE[-1] - FREQ_TABLE[0]) / (len(FREQ_TABLE)-1):.1f} Hz")
-
 # ==========================
 #  FFT-BASED FSK DECODER
 # ==========================
@@ -73,15 +68,7 @@ def decode_symbol(chunk):
     freq_diffs = np.abs(np.array(FREQ_TABLE)- peak_freq)
 
     idx = int(np.argmin(freq_diffs))
-    closest_freq = FREQ_TABLE[idx]
-
-    if not hasattr(decode_symbol, 'count'):
-        decode_symbol.count = 0
-    decode_symbol.count += 1
-    if decode_symbol.count <= 10:
-        print(f"[DEBUG] symbol {decode_symbol.count}:"
-              f"peak = {peak_freq:.0f}Hz => idx {idx}"
-              f"(target ={closest_freq}Hz, diff={abs(peak_freq-closest_freq):.0f}Hz)")
+    # closest_freq = FREQ_TABLE[idx]
     
     bits = f"{idx:0{bits_per_symbol}b}"
     return bits
@@ -92,22 +79,16 @@ def decode_signal(signal):
     """
 
     sample_per_symbol = int(SAMPLE_RATE*SYMBOL_DURATION)
-    print(f"[DEBUG] signal len =  {len(signal)} samples, sample_per_symbol = {sample_per_symbol}")
-    print(f"[DEBUG] SYMBOL DURATION: {SYMBOL_DURATION}s")
-    print(f"[DEBUG] native fft res:  {SAMPLE_RATE/sample_per_symbol:.1f} Hz")
-    print(f"[DEBUG] with 4x padding: {SAMPLE_RATE/(sample_per_symbol*4):.1f}Hz")
 
     if len(signal) <sample_per_symbol:
         print("[error] signal shorter than one symbol -< no symbols decoded")
         return ""
     
     #quick energy check
-    total_energy = float(np.sum(np.abs(signal)))
-    max_amp = float(np.max(np.abs(signal)))
-    print(f"[DEBUG] total_energy= {total_energy:.3f}. max_amp = {max_amp:.6f}")
+    # total_energy = float(np.sum(np.abs(signal)))
+    # max_amp = float(np.max(np.abs(signal)))
 
     #previewing first 50 samples for sanity (pritns truncated)
-    print("[DEBUG] first sampels: ", np.array2string(signal[:50], precision=3, separator=", "))
     
     decode_symbol.count = 0
 
@@ -128,18 +109,12 @@ def decode_signal(signal):
         else:
             symbols_skipped+=1
 
-    total_chunks = symbols_decoded + symbols_skipped
-    print(f"\n[DEBUG] Decoded {symbols_decoded}/{total_chunks} symbols"
-          f"({symbols_skipped}silent/weak)")
+    # total_chunks = symbols_decoded + symbols_skipped
 
     # trimming extra bits to form full symbols        
     if len(bitstream) % bits_per_symbol != 0:
         bitstream = bitstream[:-len(bitstream)%bits_per_symbol]
 
-    print(f"[DEBUG] final bitstream length = {len(bitstream)} bits")
-    if len(bitstream) > 0:
-        print("[DEBUG] bitstream sample:", bitstream[:200])
-            
     return bitstream
 
 
@@ -162,8 +137,6 @@ def find_sync(bits, min_match = 0.7, pattern = '111111000000111111000000'):
             best_score = score
             best_pos = i
 
-    print(f"[SYNC] Best match {best_score}/{L} at {best_pos}")
-
     return best_pos if best_score >= L*min_match else -1
     
 def decode_file(bitstream, output_path):
@@ -179,7 +152,7 @@ def decode_file(bitstream, output_path):
     """
     
     print("\n" + "="*60)
-    print("DECONDING FILE")
+    print("DECODING FILE")
     print("="*60)
 
     pattern = SYNC_BITS
@@ -192,8 +165,6 @@ def decode_file(bitstream, output_path):
     bitstream = bitstream[sync_pos:]
     while bitstream.startswith(SYNC_BITS):
         bitstream = bitstream[len(SYNC_BITS):]
-
-    print(f"[DEBUG] Payload starts with: {bitstream[:64]}")
 
     raw = bytearray()
     i = 0

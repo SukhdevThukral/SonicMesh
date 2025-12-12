@@ -12,8 +12,6 @@ def _save_wav(path, signal):
 
 #transmitting messages
 def transmit(msg: str, save_file=True):
-    print("Encoding text msg....")
-
 
     #encoding the msg into ultrasonic tones
     signal = encode_message(msg)
@@ -22,13 +20,10 @@ def transmit(msg: str, save_file=True):
     if save_file:
         # convert signal to 16bit pcm for wav
         _save_wav("message.wav", signal)
-        print("saved mesg to 'message.wav'")
 
-    print("Transmitting message..")
     #Play the signal
     sd.play(signal, SAMPLE_RATE)
     sd.wait()
-    print("Transmission complete")
 
 #transmitting ACTUAL FILES
 def transmitf(file_path: str, save_file=True):
@@ -39,20 +34,6 @@ def transmitf(file_path: str, save_file=True):
 
     if save_file:
         _save_wav("file_message.wav", signal)
-        print("saved file audio to 'file_message.wav'")
 
-    print("Transmitting..")
     sd.play(signal, SAMPLE_RATE)
     sd.wait()
-    print("File transmission complete")
-
-if __name__ == "__main__":
-    choice = input("Send (T)ext or (F)ile? ").strip().lower()
-    if choice == "t":
-        msg = input("Enter message to transmit: ")
-        transmit(msg, save_file=True)
-    elif choice == "f":
-        file_path = input("Enter file path to transmit: ")
-        transmitf(file_path, save_file=True)
-    else:
-        print("Invalid choice")

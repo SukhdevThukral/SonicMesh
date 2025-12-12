@@ -1,30 +1,48 @@
-# ===============================
-#  SonicMesh Acoustic Constants
-# ===============================
+# ===================================
+#  SonicMesh Acoustic Configurations
+# ===================================
 
 import numpy as np 
 
-
+# base audio sample rate being used for tone synthesis.
 SAMPLE_RATE = 44100
 
-# SYMBOL PROPERTIES
+# =======================
+# Symbol Encoding Props
+# =======================
 SYMBOL_BITS = 6
-SYMBOL_DURATION = 0.011 # 2.5x faster
-AMPLITUDE = 0.45  # AUDIO APMLITUDE
 
-# FFT optimization
+ # Duration of single FSK symbol (in s)
+ # Shorter durations = faster transfers but harder decoding-
+SYMBOL_DURATION = 0.011
+
+AMPLITUDE = 0.45  
+
+# =========================
+# FFT / Windowing Settings
+# =========================
+
 WINDOW_OVERLAP = 0.4
 WINDOW_FUNCTION = np.hanning # windowing function to reduce spectral leakage
 
 #*64-FSK ultrasonic frequencies (mostly inaudible)
-# keeping above ~20kHz to reduce audiblity, upper limit ~22kHz for most speakers
+# keeping between 19kHz and 22kHz.
 FREQ_TABLE = np.linspace(19000, 22000, 64 ,dtype=int).tolist()
 
-# packet chunk size
+# ==========================
+# Packetization settings
+# ==========================
+# no. of payload bytes carried per packet before CRC is added.
 CHUNK_SIZE = 800
 
-# audio post-processing
+# ===============================
+# Transmission spacing
+# ===============================
+# silence inserted b/w packets (in s), been set to zero for speed
+# unless debugging CRC or syncinc behavior.
+
 SILENCE_BETWEEN_PACKETS = 0 
+
 # Note:
 # reduced symbol duration + slight overlap reduces total audio length
 # lower amplitude + higher start frequency reduces the audiblity even further.

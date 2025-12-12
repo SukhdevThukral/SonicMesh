@@ -59,11 +59,7 @@ def packetize_file(path):
     with open(path, "rb") as f:
         raw = f.read()
 
-
-    print("[INFO] Original file size:", len(raw))
-
     compressed = lzma.compress(raw, preset=6)
-    print("[INFO] Compressed size:", len(compressed))
 
     packets = []
 
@@ -77,7 +73,6 @@ def packetize_file(path):
 
         packets.append(packet)
 
-    print("[INFO] Total packets:", len(packets))
     return packets
 
 # packets to binary string
@@ -97,7 +92,6 @@ def packets_to_bits(packets):
         pad_len= bits_per_symbol - remainder
         bitstream+= "0" * pad_len
 
-    print("[INFO] Total bits:", len(bitstream))
     return bitstream
 
 
@@ -105,17 +99,6 @@ def packets_to_bits(packets):
 def encode_file(path):
     packets = packetize_file(path)
     bitstream = packets_to_bits(packets)
-    print("[DEBUG] encoder bitstream len:", len(bitstream))
-    print("[DEBUG] first 200 bits (encoder):", bitstream[:200])
-
-    #quick synth of first symbol and printing its peak freq(sanity)
-
-    if len(bitstream) >= bits_per_symbol:
-        first_symbol = bitstream[:bits_per_symbol]
-        idx = int(first_symbol,2)
-        freq = FREQ_TABLE[idx]
-        print(f"[DEBUG] first symbol index ={idx}, freq={freq} Hz")
-
     return encode_bits_fsk(bitstream)
 
 # ========================================
