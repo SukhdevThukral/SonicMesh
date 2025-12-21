@@ -1,5 +1,7 @@
 # SonicMesh
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/sonicmesh?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/sonicmesh)
+
 **Acoustic Ultrasonic Data Transfer Library (Research Project)**
 
 SonicMesh is a Python library designed for **high-frequency ultrasonic communication**, enabling data transfer over audio. This project is part of ongoing research into **ultrasonic FSK (frequency shift keying) communication** and aims to push the limits of audio based data transmission particularly for **file transfer tht includes images**.
