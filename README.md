@@ -1,6 +1,6 @@
 # SonicMesh
 
-<img width="707" height="353" alt="sonicmesh-removebg-preview (1)" src="https://github.com/user-attachments/assets/568abef1-b9df-4fbd-8bc9-915eafbb7aee" />
+<img width="707" height="353" alt="sonicmesh-removebg-preview (1)" src="https://cdn.hackclub.com/019cf1a4-1998-739f-b731-f6ece7c4b278/sonicmesh__1_.png" />
 
 
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/sonicmesh?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/sonicmesh)
